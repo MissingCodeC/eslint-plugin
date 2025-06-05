@@ -103,7 +103,7 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
     }
 
     let key = '', type = ''
-    if(node.type === 'Identifier' || node.type === 'RestElement'){
+    if(node.type === 'Identifier' || node.type === 'RestElement' || node.type === 'TSPropertySignature'){
       if(node.typeAnnotation)
         key = nodeContent.slice(0, node.typeAnnotation.range[0] - node.range[0]).trim()
       else key = nodeContent.slice(0, node.range[1] - node.range[0]).trim()
@@ -174,22 +174,14 @@ const typeAlignment = createRule<Options, MessageIds>({
 
       for(const group of propGroups) {
         if(group.length === 1) continue;
-
-        const lengths = group.map(node => {
-          if(node.typeAnnotation){
-            const endRange = node.typeAnnotation.range[0] - node.typeAnnotation.range[1];
-            const nodeContent = context.sourceCode.getText(node, 0, endRange).trim();
-            return nodeContent.length;
-          }
-          return node.range[1] - node.range[0]
-        })
-        const maxLength = Math.max(...lengths)
+        
+        const groupInfo = nodeGroupInfo(context, group)
 
         group.forEach((node, i) => {
           if(!node.typeAnnotation) return;
           
-          const expectedSpacing = maxLength - lengths[i] + 1
-          const actualSpacing = node.typeAnnotation.range[0] - (node.range[0] + lengths[i])
+          const expectedSpacing = groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
+          const actualSpacing = node.typeAnnotation.range[0] - node.range[0] - groupInfo.keyLengths[i]
 
           if(actualSpacing !== expectedSpacing){
             context.report({
@@ -198,7 +190,7 @@ const typeAlignment = createRule<Options, MessageIds>({
               fix(fixer){
                 const newSpacing = ' '.repeat(expectedSpacing);
                 return fixer.replaceTextRange(
-                  [node.range[0] + lengths[i], node.typeAnnotation!.range[0]],
+                  [node.range[0] + groupInfo.keyLengths[i], node.typeAnnotation!.range[0]],
                   newSpacing
                 )
               }
