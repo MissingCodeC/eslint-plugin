@@ -1,22 +1,140 @@
 import type { Rule } from 'eslint'
 import { TSESTree, ESLintUtils } from '@typescript-eslint/utils';
-import { getConsecutive } from 'src/utils';
+import { RuleContext, SourceCode } from '@typescript-eslint/utils/ts-eslint';
 
+// import { getConsecutive, isMethod, nodeGroupInfo } from 'src/utils';
+
+/* TYPES */
+type Options = [{
+  alignTypeDefinitions? : boolean;
+  alignFunctionParams?  : boolean;
+}]
+
+type MessageIds = 'misalignedKeys' | 'misalignedTypes' | 'misalignedValues';
+
+type Context = Readonly<RuleContext<MessageIds, Options>>
+
+/* UTILITY FUNCTIONS */
+export type NodeGroupInfo = {
+  accessorLengths   : number[],
+  maxAccessorLength : number,
+  keyLengths        : number[],
+  maxKeyLength      : number,
+  typeLengths       : number[],
+  maxTypeLength     : number
+}
+
+/* UTILITY FUNCTIONS */
+// Get consecutive nodes
+const defaultGrouping = (curr: TSESTree.Node, prev: TSESTree.Node): boolean => {
+  if(curr.type === prev.type)
+    return true
+  return false
+}
+
+export function getConsecutive(
+  nodes: TSESTree.Node[],
+  grouping: (current: TSESTree.Node, previous: TSESTree.Node) => boolean = defaultGrouping
+): TSESTree.Node[][] {
+  if(nodes.length === 0 || nodes.length === 1) return [];
+
+  const groups: TSESTree.Node[][] = [];
+  let currentGroup: TSESTree.Node[] = [];
+
+  for(let i = 0; i < nodes.length; i++) {
+    const currentNode = nodes[i];
+
+    if(currentNode.loc.start.line !== currentNode.loc.end.line){ // Multiline Check
+      if(currentGroup.length){
+        groups.push(currentGroup)
+        currentGroup = []
+      }
+      continue
+    }
+
+    if(i === 0) {
+      currentGroup.push(currentNode)
+      continue
+    }
+    
+    const previousNode = nodes[i - 1];
+    if(currentNode.loc.start.line === previousNode.loc.end.line) continue; // Overlapping Nodes
+
+    if(!grouping(currentNode, previousNode) || currentNode.loc.start.line !== previousNode.loc.end.line + 1) {
+      groups.push(currentGroup)
+      currentGroup = [currentNode];
+      continue;
+    }
+    currentGroup.push(currentNode);
+  }
+
+  groups.push(currentGroup)
+  return groups;
+}
+
+// Check if PropertySignature is defining a function
+export function isMethod(node: TSESTree.TSPropertySignature): boolean {
+  if(!node.typeAnnotation)
+    return false
+  if(node.typeAnnotation.typeAnnotation.type === 'TSFunctionType')
+    return true
+  return false
+}
+
+// Get node group length informations
+export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGroupInfo {
+  let accessorLengths   : number[]      = [],
+      maxAccessorLength : number        = 0,
+      keyLengths        : number[]      = [],
+      maxKeyLength      : number        = 0,
+      typeLengths       : number[]      = [],
+      maxTypeLength     : number        = 0
+
+  nodes.forEach((node, i) => {
+    let nodeContent = context.sourceCode.getText(node)
+
+    if(node.type === 'TSParameterProperty'){
+      const accessor = nodeContent.slice(0, node.parameter.range[0] - node.range[0]).trim()
+      accessorLengths.push(accessor.length)
+      if(accessor.length > maxAccessorLength)
+        maxAccessorLength = accessor.length
+      node = node.parameter;
+      nodeContent = context.sourceCode.getText(node)
+    }
+
+    let key = '', type = ''
+    if(node.type === 'Identifier' || node.type === 'RestElement'){
+      if(node.typeAnnotation)
+        key = nodeContent.slice(0, node.typeAnnotation.range[0] - node.range[0]).trim()
+      else key = nodeContent.slice(0, node.range[1] - node.range[0]).trim()
+    }
+    if(node.type === 'AssignmentPattern'){
+      if(node.left.typeAnnotation){
+        key = nodeContent.slice(0, node.left.typeAnnotation.range[0] - node.left.range[0]).trim()
+        type = nodeContent.slice(node.left.typeAnnotation.range[0] - node.left.range[0], node.left.typeAnnotation.range[1] - node.left.range[0]).trim()
+      } else {
+        key = nodeContent.slice(0, node.left.range[1] - node.left.range[0]).trim()
+        type = ''
+      }
+    }
+
+    keyLengths.push(key.length)
+    if(key.length > maxKeyLength)
+        maxKeyLength = key.length
+
+    typeLengths.push(type.length)
+    if(type.length > maxTypeLength)
+        maxTypeLength = type.length
+    
+  })
+
+  return { accessorLengths, maxAccessorLength, keyLengths, maxKeyLength, typeLengths, maxTypeLength }
+}
+
+/* RULE DEFINITION */
 const createRule = ESLintUtils.RuleCreator(
   name => `https://github.com/missingcodec/eslint-plugin/blob/main/docs/${name}.md`
 );
-
-type FuncParamTypes = TSESTree.Identifier | TSESTree.AssignmentPattern | TSESTree.RestElement | TSESTree.BindingName
-
-type Options = [{
-  alignInterfaces?     : boolean;
-  alignTypeAliases?    : boolean;
-  alignFunctionParams? : boolean;
-  // alignClassProperties?: boolean,
-  // alignVariableDeclarations?: boolean;
-}]
-
-type MessageIds = 'misalignedTypes' | 'misalignedValues';
 
 const typeAlignment = createRule<Options, MessageIds>({
   name: 'type-alignment',
@@ -30,33 +148,28 @@ const typeAlignment = createRule<Options, MessageIds>({
       {
         type: 'object',
         properties: {
-          alignInterfaces: { type: 'boolean' },
-          alignTypeAliases: { type: 'boolean' },
+          alignTypeDefinitions: { type: 'boolean' },
           alignFunctionParams: { type: 'boolean' },
-          // alignClassProperties: { type: 'boolean' },
-          // alignVariableDeclarations: { type: 'boolean' },
         },
         additionalProperties: false,
       },
     ],
     messages: {
+      'misalignedKeys': 'Parameter keys must be aligned.',
       'misalignedTypes': 'Type annotations must be aligned.',
       'misalignedValues': 'Default value declarations must be aligned.'
     },
   },
   defaultOptions: [
       {
-        alignInterfaces: true,
-        alignTypeAliases: true,
+        alignTypeDefinitions: true,
         alignFunctionParams: true,
-        // alignClassProperties: true,
-        // alignVariableDeclarations: true,
       }
   ],
   create(context, [options]){
 
     function alignTypeDefinitions(nodes : TSESTree.Node[]){
-      const properties = nodes.filter(node => node.type === 'TSPropertySignature')
+      const properties = nodes.filter(node => node.type === 'TSPropertySignature' && !isMethod(node))
       const propGroups = getConsecutive(properties) as TSESTree.TSPropertySignature[][];
 
       for(const group of propGroups) {
@@ -64,7 +177,7 @@ const typeAlignment = createRule<Options, MessageIds>({
 
         const lengths = group.map(node => {
           if(node.typeAnnotation){
-            const endRange = node.typeAnnotation.range[0] - node.typeAnnotation.range[1] - 1;
+            const endRange = node.typeAnnotation.range[0] - node.typeAnnotation.range[1];
             const nodeContent = context.sourceCode.getText(node, 0, endRange).trim();
             return nodeContent.length;
           }
@@ -76,7 +189,6 @@ const typeAlignment = createRule<Options, MessageIds>({
           if(!node.typeAnnotation) return;
           
           const expectedSpacing = maxLength - lengths[i] + 1
-          const colonToken = context.sourceCode.getTokenBefore(node.typeAnnotation!)
           const actualSpacing = node.typeAnnotation.range[0] - (node.range[0] + lengths[i])
 
           if(actualSpacing !== expectedSpacing){
@@ -97,99 +209,108 @@ const typeAlignment = createRule<Options, MessageIds>({
     }
 
     function alignFunctionParams(nodes : TSESTree.Node[]) {
-      const paramGroups = getConsecutive(nodes);
+      const grouping = (curr: TSESTree.Node, prev: TSESTree.Node): boolean => {
+        if(curr.type === 'RestElement' && prev.type !== 'TSParameterProperty' || curr.type === prev.type)
+          return true
+        return false
+      }
+      const paramGroups = getConsecutive(nodes, grouping);
 
-      for(const group of paramGroups){
-        if(group.length === 1) continue;
+      for (const group of paramGroups) {
+        if (group.length === 1) continue;
 
-        const keyLengths = group.map(node => {
-          if (node.type === 'Identifier')
-            return node.name.length
-          else if (node.type === 'AssignmentPattern' && node.left.type === 'Identifier')
-            return node.left.name.length
-          else if (node.type === 'RestElement' && node.argument.type === 'Identifier')
-            return node.argument.name.length + 3
-          // else if (node.type === 'TSParameterProperty' && node.parameter.type === 'Identifier')
-          else
-            return 0;
-        })
-
-        const typeLengths = group.map(node => {
-          if (node.type === 'AssignmentPattern' && node.left.type === 'Identifier' && node.left.typeAnnotation)
-            return node.left.typeAnnotation.typeAnnotation.range[1] - node.left.typeAnnotation.typeAnnotation.range[0]
-          else 
-            return 0;
-        })
-
-        const maxKeyLength = Math.max(...keyLengths);
-        const maxTypeLength = Math.max(...typeLengths);
-
+        const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
-          if(!keyLengths[i]) return;
+          if(node.type === 'TSParameterProperty'){
+            const expectedAccessorSpacing = groupInfo.maxAccessorLength - groupInfo.accessorLengths[i] + 1
+            const actualAccessorSpacing = node.parameter.range[0] - node.range[0] - groupInfo.accessorLengths[i]
+            
+            if(actualAccessorSpacing !== expectedAccessorSpacing){
+              const newSpacing = ' '.repeat(expectedAccessorSpacing);
+              const replaceRange = [node.range[0] + groupInfo.accessorLengths[i], node.parameter.range[0]] as readonly [number, number]
+              context.report({
+                node: node,
+                messageId: 'misalignedKeys',
+                fix(fixer){
+                  return fixer.replaceTextRange(replaceRange, newSpacing)
+                }
+              })
+            }
+            node = node.parameter
+          }
 
-          let typeAnnotation: TSESTree.TSTypeAnnotation
-          let keySpacing: number
-          let typeSpacing: number = 0
-
-          if(node.type === 'Identifier' || node.type === 'RestElement') {
+          if(node.type === 'Identifier' || node.type === 'RestElement'){
             if(!node.typeAnnotation) return;
-            typeAnnotation = node.typeAnnotation!
-          }
-          if(node.type === 'AssignmentPattern') {
-            if(!node.left.typeAnnotation) return;
-            typeAnnotation = node.left.typeAnnotation!
-            typeSpacing = node.right.range[0] - typeAnnotation.range[1] - 2
-          }
-          
-          keySpacing = typeAnnotation!.range[0] - node.range[0] - keyLengths[i]
-          const expectedKeySpacing = maxKeyLength - keyLengths[i] + 1
-          const expectedTypeSpacing = maxTypeLength - typeLengths[i] + 1
+            const expectedKeySpacing = groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
+            const actualKeySpacing = node.typeAnnotation.range[0] - node.range[0] - groupInfo.keyLengths[i]
 
-          if(keySpacing !== expectedKeySpacing){
-            context.report({
-              node: typeAnnotation!,
-              messageId: 'misalignedTypes',
-              fix(fixer){
+            if(actualKeySpacing !== expectedKeySpacing){
+              const newSpacing = ' '.repeat(expectedKeySpacing);
+              const replaceRange = [node.range[0] + groupInfo.keyLengths[i], node.typeAnnotation.range[0]] as readonly [number, number]
+              context.report({
+                node: node,
+                messageId: 'misalignedTypes',
+                fix(fixer){
+                  return fixer.replaceTextRange(replaceRange, newSpacing)
+                }
+              })
+            }
+          }
+
+          else if(node.type === 'AssignmentPattern'){
+            if(node.left.typeAnnotation){
+              const expectedKeySpacing = groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
+              const actualKeySpacing = node.left.typeAnnotation.range[0] - node.range[0] - groupInfo.keyLengths[i]
+
+              if(actualKeySpacing !== expectedKeySpacing){
                 const newSpacing = ' '.repeat(expectedKeySpacing);
-                const colonToken = context.sourceCode.getTokenBefore(typeAnnotation!)
-                return fixer.replaceTextRange(
-                  [colonToken!.range[1], typeAnnotation!.range[0]],
-                  newSpacing
-                )
+                const replaceRange = [node.range[0] + groupInfo.keyLengths[i], node.left.typeAnnotation.range[0]] as readonly [number, number]
+                context.report({
+                  node: node,
+                  messageId: 'misalignedTypes',
+                  fix(fixer){
+                    return fixer.replaceTextRange(replaceRange, newSpacing)
+                  }
+                })
               }
-            })
-          }
+            }
 
-          if(node.type === 'AssignmentPattern' && typeSpacing !== expectedTypeSpacing){
-            context.report({
-              node: typeAnnotation!,
-              messageId: 'misalignedValues',
-              fix(fixer){
-                const newSpacing = ' '.repeat(expectedTypeSpacing);
-                const equalToken = context.sourceCode.getTokenAfter(typeAnnotation!)
-                return fixer.replaceTextRange(
-                  [typeAnnotation!.range[1], equalToken!.range[0]],
-                  newSpacing
-                )
-              }
-            })
+            const expectedTypeSpacing = groupInfo.maxTypeLength - groupInfo.typeLengths[i] + 1
+            const equalToken = context.sourceCode.getTokenBefore(node.right)
+            const actualTypeSpacing = equalToken!.range[0] - node.left.range[1]
+
+            if(actualTypeSpacing !== expectedTypeSpacing){
+              const newSpacing = ' '.repeat(expectedTypeSpacing);
+              const replaceRange = [node.left.range[1], equalToken!.range[0]] as readonly [number, number]
+              context.report({
+                node: node,
+                messageId: 'misalignedTypes',
+                fix(fixer){
+                  return fixer.replaceTextRange(replaceRange, newSpacing)
+                }
+              })
+            }
           }
         })
       }
     }
 
-    
-
     return {
       TSInterfaceBody(node) {
-        if (options.alignInterfaces) {
+        if (options.alignTypeDefinitions) {
           alignTypeDefinitions(node.body)
         }
       },
 
       TSTypeLiteral(node) {
-        if (options.alignTypeAliases) {
+        if (options.alignTypeDefinitions) {
           alignTypeDefinitions(node.members)
+        }
+      },
+
+      TSMethodSignature(node) {
+        if (options.alignTypeDefinitions) {
+          alignFunctionParams(node.params)
         }
       },
 
@@ -210,12 +331,6 @@ const typeAlignment = createRule<Options, MessageIds>({
           alignFunctionParams(node.params)
         }
       },
-
-      // ClassBody(node) {
-      //   if (options.alignClassProperties){
-      //     alignClassProperties(node.body)
-      //   }
-      // }
     }
   }
 }) as any as Rule.RuleModule
