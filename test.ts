@@ -55,3 +55,9 @@ class Kir3 {
     // this.kir4 = c
   }
 }
+
+const myObj = {
+  prop1               : 'hello world',
+  property2           : 'hi',
+  propertyNumberThree : ''
+}

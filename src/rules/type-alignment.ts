@@ -8,21 +8,21 @@ import type { RuleContext, RuleFixer } from '@typescript-eslint/utils/ts-eslint'
 type Context = Readonly<RuleContext<MessageIds, Options>>
 type MessageIds = 'misalignedKeys' | 'misalignedTypes' | 'misalignedValues';
 type Options = [{
-  alignTypeDefinitions? : boolean;
-  alignFunctionParams?  : boolean;
-  alignClassProperties? : boolean;
+  alignTypeDefinitions?  : boolean;
+  alignFunctionParams?   : boolean;
+  alignClassProperties?  : boolean;
+  alignObjectProperties? : boolean;
 }]
 
 type TypedNode = TSESTree.Node & { key?: TSESTree.Identifier, typeAnnotation: TSESTree.TSTypeAnnotation }
 type InitializedNode = TSESTree.Node & { value: NonNullable<TSESTree.Node> }
-type TypedAndInitializedNode = TypedNode & InitializedNode
 
 type AlignmentOptions = {
   messageId     : MessageIds
   desiredColumn : number,
   targetRange   : [number, number],
   padding       : number,
-  isValue?      : boolean
+  delimiter?    : string
 }
 
 type NodeGroupInfo = {
@@ -183,15 +183,14 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
 
 // Move node to the desired column
 function alignItem(context: Context, node: TSESTree.Node, options: AlignmentOptions): void {
-  const target = options.isValue ? context.sourceCode.getTokenBefore(node) : node
-  const startingColumn = target!.loc.start.column
-
-  if(startingColumn !== options.desiredColumn){
+  const padding = ' '.repeat(options.padding) + options.delimiter
+  const desiredColumn = options.delimiter ? options.desiredColumn + options.delimiter.length : options.desiredColumn
+  if(node.loc.start.column !== desiredColumn){
     context.report({
       node: node,
       messageId: options.messageId,
       fix(fixer: RuleFixer){
-        return fixer.replaceTextRange(options.targetRange, ' '.repeat(options.padding))
+        return fixer.replaceTextRange(options.targetRange, padding)
       }
     })
   }
@@ -216,7 +215,8 @@ const typeAlignment = createRule<Options, MessageIds>({
         properties: {
           alignTypeDefinitions: { type: 'boolean' },
           alignFunctionParams: { type: 'boolean' },
-          alignClassProperties: { type: 'boolean' }
+          alignClassProperties: { type: 'boolean' },
+          alignObjectProperties: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -231,7 +231,8 @@ const typeAlignment = createRule<Options, MessageIds>({
       {
         alignTypeDefinitions: true,
         alignFunctionParams: true,
-        alignClassProperties: true
+        alignClassProperties: true,
+        alignObjectProperties: true
       }
   ],
   create(context, [options]){
@@ -307,15 +308,12 @@ const typeAlignment = createRule<Options, MessageIds>({
 
           if(node.type === 'AssignmentPattern'){
             const valueLoc = node.left.typeAnnotation ? groupInfo.valueDesiredCol : groupInfo.typeDesiredCol
-            const startIndex = node.left.range[1]
-            const endIndex = context.sourceCode.getTokenBefore(node.right)!.range[0]
-
             alignItem(context, node.right, {
               messageId: 'misalignedTypes',
               desiredColumn: valueLoc,
-              targetRange: [startIndex, endIndex],
+              targetRange: [node.left.range[1], node.right.range[0]],
               padding: valuePadding,
-              isValue: true
+              delimiter: '= '
             })
           }
         })
@@ -363,18 +361,47 @@ const typeAlignment = createRule<Options, MessageIds>({
           if(node.value !== null) {
             const valueLoc = node.typeAnnotation ? groupInfo.valueDesiredCol : groupInfo.typeDesiredCol
             const startIndex = node.typeAnnotation ? node.typeAnnotation.range[1] : node.key.range[1]
-            const endIndex = context.sourceCode.getTokenBefore(node.value)!.range[0]
+            const endIndex = node.value.range[0]
 
             alignItem(context, node.value, {
               messageId: 'misalignedValues',
               desiredColumn: valueLoc,
               targetRange: [startIndex, endIndex],
               padding: valuePadding,
-              isValue: true
+              delimiter: '= '
             })
           }
         })
       }
+    }
+
+    function alignObjectProperties(nodes: TSESTree.Node[]) {
+      const properties = nodes.filter(node => node.type === 'Property' && node.method === false && node.value.type !== 'ArrowFunctionExpression' && node.shorthand === false)
+      const propGroups = getConsecutive(properties, () => true) as TSESTree.Property[][]
+
+      for(const group of propGroups){
+        let maxKeyLength = 0, keyLengths: number[] = []
+        for(const node of group){
+          let length = node.key.range[1] - node.key.range[0]
+          if(node.computed) length += 2
+          keyLengths.push(length)
+          if(length > maxKeyLength) maxKeyLength = length
+        }
+
+        group.forEach((node, i) => {
+          alignItem(context, node.value, {
+            messageId: 'misalignedValues',
+            desiredColumn: node.loc.start.column + maxKeyLength + 1,
+            targetRange: [node.range[0] + keyLengths[i], node.value.range[0]],
+            padding: maxKeyLength - keyLengths[i] + 1,
+            delimiter: ': '
+          })
+        })
+      }
+    }
+
+    function alignVariables(node: TSESTree.VariableDeclaration) {
+      node.kind
     }
 
     return {
@@ -387,12 +414,6 @@ const typeAlignment = createRule<Options, MessageIds>({
       TSTypeLiteral(node) {
         if (options.alignTypeDefinitions) {
           alignTypeDefinitions(node.members)
-        }
-      },
-
-      TSMethodSignature(node) {
-        if (options.alignTypeDefinitions) {
-          alignFunctionParams(node.params)
         }
       },
 
@@ -414,7 +435,19 @@ const typeAlignment = createRule<Options, MessageIds>({
         }
       },
 
+      TSMethodSignature(node) {
+        if (options.alignFunctionParams) {
+          alignFunctionParams(node.params)
+        }
+      },
+
       TSFunctionType(node) {
+        if (options.alignFunctionParams) {
+          alignFunctionParams(node.params)
+        }
+      },
+
+      TSConstructSignatureDeclaration(node) {
         if (options.alignFunctionParams) {
           alignFunctionParams(node.params)
         }
@@ -423,6 +456,12 @@ const typeAlignment = createRule<Options, MessageIds>({
       ClassBody(node){
         if (options.alignClassProperties) {
           alignClassProperties(node.body)
+        }
+      },
+
+      ObjectExpression(node){
+        if (options.alignObjectProperties) {
+          alignObjectProperties(node.properties)
         }
       }
     }
