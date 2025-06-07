@@ -258,6 +258,7 @@ const typeAlignment = createRule<Options, MessageIds>({
     function alignFunctionParams(nodes : TSESTree.Node[]) {
       const paramGroups = getConsecutive(nodes, () => true);
       for (const group of paramGroups) {
+        if(group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
 
@@ -327,6 +328,7 @@ const typeAlignment = createRule<Options, MessageIds>({
       let propGroups = getConsecutive(properties, () => true) as TSESTree.PropertyDefinition[][];
 
       for(const group of propGroups){
+        if(group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node,i) => {
           let keyPadding = groupInfo.maxAccessorLength - groupInfo.accessorLengths[i] + 1
