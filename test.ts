@@ -1,43 +1,57 @@
-interface Test1 {
-  firstNameKiRverylong?: {
-    lastName? : string;
-    age       : number;
-  };
-  lastName : string;
-  age      : number;
-  email    : string;
+type Kir = {
+  kir       : string,
+  kirkirkir : string[],
+  kos       : 'd'
+  boob: (
+    kir       : string,
+    kirkirkir : string[],
+    ...kir2   : string[]
+  ) => void
 
-  func(
-    lastName : string,
-    age      : number,
-    email    : string,
-  ) : string
+  myMethod(
+    kir       : string,
+    kirkirkir : string[],
+    ...kir2   : string[]
+  ): void
 }
 
-type Test2 = {
-  firstName? : string;
-  lastName   : string;
-  age?       : number;
-  email      : string;
+interface Kir2 {
+  kir       : string
+  Kirkirkir : string[]
+  kos       : 'd'
+  boob: (
+    kir       : string,
+    kirkirkir : string[],
+    ...kir2   : string[]
+  ) => void
+
+  myMethod(
+    kir       : string,
+    kirkirkir : string[],
+    ...kir2   : string[]
+  ): void
 }
 
-function Test3(
-  firstName : string,
-  lastName  : string,
-  ageIsJustANumber : number | string = 69,
-  email            : string          = 'abc@ki.r',
-): string {
-  return 'kir'
-}
+class Kir3 {
+  public kir123   = 'kir'
+  public kir1233  = 'kir'
+  public kir12333 = 'kir'
+  public kir      : string[] = ['kir']
+                         //.
+  //public    kir3: string
+  private   kirkirkir : string[]   = ['k']
+  private   kir4      : string[][] = [['k']]
+  protected kir5      = [true, true, true]
+  kir6535             = ''
 
-class Kir {
   constructor(
-    firstNam1       : string          = 'kir',
-    firstNadwdqwdm2 : string          = 'kir',
-    firstNam3       : string | number = 'kir',
-    firstName : string,
-    lastName  : string,
-    ...kir    : string[]
-  ) {
+    a              = '',
+    public    b    : string[]   = ['kir'],
+    protected c    : string[][] = [['kir']],
+    ...d           : boolean[]
+  ){
+    this.kir123 = a
+    // this.kirkirkir = b
+    // this.kir4 = c
   }
 }
