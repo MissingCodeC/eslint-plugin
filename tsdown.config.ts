@@ -4,9 +4,9 @@ export default defineConfig({
   entry: [
     './src/index.ts',
   ],
-  external: [/@typescript-eslint\/.*/],
-  shims: true,
-  format: ['esm'],
-  platform: 'node',
-  target: 'ESNext'
+  external : [/@typescript-eslint\/.*/],
+  shims    : true,
+  format   : ['esm'],
+  platform : 'node',
+  target   : 'ESNext'
 })

@@ -47,15 +47,15 @@ const defaultGrouping = (curr: TSESTree.Node, prev: TSESTree.Node): boolean => {
 }
 
 export function getConsecutive(
-  nodes: TSESTree.Node[],
-  grouping: (current: TSESTree.Node, previous: TSESTree.Node) => boolean = defaultGrouping
+  nodes    : TSESTree.Node[],
+  grouping : (current: TSESTree.Node, previous: TSESTree.Node) => boolean = defaultGrouping
 ): TSESTree.Node[][] {
   if(nodes.length === 0 || nodes.length === 1) return [];
 
   const groups: TSESTree.Node[][] = [];
   let currentGroup: TSESTree.Node[] = [];
 
-  for(let i = 0; i < nodes.length; i++) {
+  for(let i           = 0; i < nodes.length; i++) {
     const currentNode = nodes[i];
 
     if(currentNode.loc.start.line !== currentNode.loc.end.line){ // Multiline Check
@@ -89,7 +89,7 @@ export function getConsecutive(
 // Check if PropertySignature is defining a function
 export function isMethod(node: TSESTree.Node): boolean {
   if(
-    node.type === 'TSPropertySignature' &&
+    (node.type === 'TSPropertySignature' || node.type === 'Identifier') &&
     node.typeAnnotation &&
     node.typeAnnotation.typeAnnotation.type === 'TSFunctionType'
   )
@@ -102,6 +102,23 @@ export function isMethod(node: TSESTree.Node): boolean {
   return false
 }
 
+function isInControlFlow(node: TSESTree.Node): boolean {
+  const controlFlowTypes = [
+    'IfStatement',
+    'ForStatement', 
+    'ForInStatement',
+    'ForOfStatement',
+    'WhileStatement',
+    'DoWhileStatement',
+    'SwitchStatement',
+    'TryStatement',
+    'CatchClause'
+  ];
+  if(node.parent)
+    return controlFlowTypes.includes(node.parent.type);
+  return false
+}
+
 // Get node group length informations
 export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGroupInfo {
   let keywordLengths : number[] = [],
@@ -111,8 +128,6 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
   let startingColumn = nodes[0].loc.start.column
   let idDesiredCol = 0, typeDesiredCol = 0, valueDesiredCol = 0
   let maxKeywordLength = 0, maxIdLength = 0, maxTypeLength = 0
-
-  
 
   for(let node of nodes){
     let nodeContent = context.sourceCode.getText(node)
@@ -211,7 +226,7 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
 
 // Move node to the desired column
 function alignItem(context: Context, node: TSESTree.Node, options: AlignmentOptions): void {
-  let padding = options.delimiter ? ' '.repeat(options.padding) + options.delimiter : ' '.repeat(options.padding)
+  let   padding       = options.delimiter ? ' '.repeat(options.padding) + options.delimiter : ' '.repeat(options.padding)
   const desiredColumn = options.delimiter ? options.desiredColumn + options.delimiter.length : options.desiredColumn
   if(node.loc.start.column !== desiredColumn){
     context.report({
@@ -285,6 +300,7 @@ const typeAlignment = createRule<Options, MessageIds>({
     }
 
     function alignFunctionParams(nodes : TSESTree.Node[]) {
+      nodes = nodes.filter(node => !isMethod(node))
       const paramGroups = getConsecutive(nodes, () => true);
       for (const group of paramGroups) {
         if(!group.length || group.length === 1) continue;
@@ -295,17 +311,15 @@ const typeAlignment = createRule<Options, MessageIds>({
           let idRange: TSESTree.Range = [node.range[0] - node.loc.start.column + groupInfo.startingColumn, node.range[0]]
           let idDesiredCol = groupInfo.startingColumn
 
-          let typePadding = groupInfo.maxKeywordLength -
-                            groupInfo.keywordLengths[i] +
-                            groupInfo.maxIdLength -
-                            groupInfo.idLengths[i] + 2
+          let typePadding = groupInfo.maxKeywordLength === 0
+            ? groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
+            : groupInfo.maxKeywordLength - groupInfo.maxIdLength - groupInfo.idLengths[i] + 2
 
           if(node.type === 'TSParameterProperty'){
             idRange = [node.range[0] + groupInfo.keywordLengths[i], node.parameter.range[0]]
             idDesiredCol = groupInfo.idDesiredCol
             idPadding = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
             node = node.parameter
-
             typePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
           }
 
@@ -351,13 +365,13 @@ const typeAlignment = createRule<Options, MessageIds>({
     function alignClassProperties(nodes : TSESTree.Node[]) {
       //Aligning All Property Keys
       const properties = nodes.filter(node => node.type === 'PropertyDefinition' && !isMethod(node))
-      let propGroups = getConsecutive(properties, () => true) as TSESTree.PropertyDefinition[][];
+      let   propGroups = getConsecutive(properties, () => true) as TSESTree.PropertyDefinition[][];
 
       for(const group of propGroups){
         if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node,i) => {
-          let idPadding = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
+          let idPadding   = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
           let typePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
           let idRange: TSESTree.Range = [node.range[0] + groupInfo.keywordLengths[i], node.key.range[0]]
           let idDesiredCol = groupInfo.idDesiredCol
@@ -375,8 +389,8 @@ const typeAlignment = createRule<Options, MessageIds>({
             padding       : idPadding
           })
 
-          let valueLoc = groupInfo.typeDesiredCol
-          let valueIndex = node.key.range[1]
+          let valueLoc     = groupInfo.typeDesiredCol
+          let valueIndex   = node.key.range[1]
           let valuePadding = typePadding
 
           if(node.typeAnnotation){
@@ -424,9 +438,8 @@ const typeAlignment = createRule<Options, MessageIds>({
     }
 
     function alignVariables(nodes: TSESTree.VariableDeclaration[]) {
-      const isValid = (decl: TSESTree.VariableDeclarator): boolean => decl.id.type === 'ArrayPattern' || decl.id.type === 'ObjectPattern' || (decl.init !== null && (decl.init.type === 'ArrayExpression' || decl.init.type === 'ObjectExpression'))
-      const single = nodes.filter(node => node.declarations.length === 1 && !node.declarations.some(isValid))
-      let groups = getConsecutive(single, () => true) as TSESTree.VariableDeclaration[][]
+      const single = nodes.filter(node => node.declarations.length === 1)
+      let   groups = getConsecutive(single, () => true) as TSESTree.VariableDeclaration[][]
       
       for(const group of groups) {
         if(!group.length || group.length === 1) continue;
@@ -440,7 +453,7 @@ const typeAlignment = createRule<Options, MessageIds>({
           })
 
           let valueDesiredCol = groupInfo.typeDesiredCol
-          let valuePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
+          let valuePadding    = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
 
           if(node.declarations[0].id.typeAnnotation){
             valueDesiredCol = groupInfo.valueDesiredCol
@@ -532,6 +545,10 @@ const typeAlignment = createRule<Options, MessageIds>({
 
       VariableDeclaration(node){
         if (options.alignObjectProperties) {
+          if(
+            !isInControlFlow(node) &&
+            !node.declarations.some(decl => decl.id.type === 'ArrayPattern' || decl.id.type === 'ObjectPattern' || (decl.init !== null && (decl.init.type === 'ArrayExpression' || decl.init.type === 'ObjectExpression')))
+          )
           vars.push(node)
         }
       },
