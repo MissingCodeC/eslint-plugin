@@ -26,16 +26,16 @@ type AlignmentOptions = {
 }
 
 type NodeGroupInfo = {
-  startingColumn    : number,
-  keyDesiredCol     : number,
-  typeDesiredCol    : number,
-  valueDesiredCol   : number,
-  accessorLengths   : number[],
-  keyLengths        : number[],
-  typeLengths       : number[],
-  maxAccessorLength : number,
-  maxKeyLength      : number,
-  maxTypeLength     : number,
+  startingColumn   : number,
+  idDesiredCol     : number,
+  typeDesiredCol   : number,
+  valueDesiredCol  : number,
+  keywordLengths   : number[],
+  idLengths        : number[],
+  typeLengths      : number[],
+  maxKeywordLength : number,
+  maxIdLength      : number,
+  maxTypeLength    : number,
 }
 
 /* UTILITY FUNCTIONS */
@@ -104,91 +104,119 @@ export function isMethod(node: TSESTree.Node): boolean {
 
 // Get node group length informations
 export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGroupInfo {
-  let accessorLengths : number[] = [],
-      keyLengths      : number[] = [],
-      typeLengths     : number[] = []
+  let keywordLengths : number[] = [],
+      idLengths      : number[] = [],
+      typeLengths    : number[] = []
 
   let startingColumn = nodes[0].loc.start.column
-  let keyDesiredCol = 0, typeDesiredCol = 0, valueDesiredCol = 0
-  let maxAccessorLength = 0, maxKeyLength = 0, maxTypeLength = 0
+  let idDesiredCol = 0, typeDesiredCol = 0, valueDesiredCol = 0
+  let maxKeywordLength = 0, maxIdLength = 0, maxTypeLength = 0
 
   nodes.forEach((node, i) => {
     let nodeContent = context.sourceCode.getText(node)
-    let accessor = '', key = '', type = ''
+    let keyword = '', id = '', type = ''
 
     if(node.loc.start.column < startingColumn)
       startingColumn = node.loc.start.column
 
     if(node.type === 'TSParameterProperty'){
-      accessor = nodeContent.slice(0, node.parameter.range[0] - node.range[0]).trim()
+      keyword = nodeContent.slice(0, node.parameter.range[0] - node.range[0]).trim()
       node = node.parameter;
       nodeContent = context.sourceCode.getText(node)
     }
 
-    if(node.type === 'PropertyDefinition'){
-      accessor = nodeContent.slice(0, node.key.range[0] - node.range[0]).trim()
-      key = (node.key as TSESTree.Identifier).name
-      
-      if(node.typeAnnotation)
-        type = nodeContent.slice(node.typeAnnotation.range[0] - node.range[0], node.typeAnnotation.range[1] - node.range[0]).trim()
-      else type = ''
-    }
-
     if(node.type === 'Identifier' || node.type === 'RestElement' || node.type === 'TSPropertySignature'){
       if(node.typeAnnotation)
-        key = nodeContent.slice(0, node.typeAnnotation.range[0] - node.range[0]).trim()
-      else key = nodeContent.slice(0, node.range[1] - node.range[0]).trim()
+        id = nodeContent.slice(0, node.typeAnnotation.range[0] - node.range[0]).trim()
+      else id = nodeContent.slice(0, node.range[1] - node.range[0]).trim()
     }
 
     if(node.type === 'AssignmentPattern'){
       if(node.left.typeAnnotation){
-        key = nodeContent.slice(0, node.left.typeAnnotation.range[0] - node.left.range[0]).trim()
+        id = nodeContent.slice(0, node.left.typeAnnotation.range[0] - node.left.range[0]).trim()
         type = nodeContent.slice(node.left.typeAnnotation.range[0] - node.left.range[0], node.left.typeAnnotation.range[1] - node.left.range[0]).trim()
-      } else {
-        key = nodeContent.slice(0, node.left.range[1] - node.left.range[0]).trim()
-        type = ''
+      } else id = nodeContent.slice(0, node.left.range[1] - node.left.range[0]).trim()
+    }
+
+    if(node.type === 'PropertyDefinition'){
+      keyword = nodeContent.slice(0, node.key.range[0] - node.range[0]).trim()
+      id = (node.key as TSESTree.Identifier).name
+      
+      if(node.typeAnnotation)
+        type = nodeContent.slice(node.typeAnnotation.range[0] - node.range[0], node.typeAnnotation.range[1] - node.range[0]).trim()
+    }
+
+    if(node.type === 'Property') {
+      id = nodeContent.slice(0, node.key.range[1] - node.key.range[0]).trim()
+      if(node.computed) id = `[${ id }]`
+    }
+
+    // ONLY MEANT TO PROCCESS SINGLE VARIABLE DECLARATIONS
+    if(node.type === 'VariableDeclaration'){
+      keyword = nodeContent.slice(0, node.declarations[0].range[0] - node.range[0]).trim()
+      id = (node.declarations[0].id as TSESTree.Identifier).name
+      if(node.declarations[0].id.typeAnnotation){
+        type = nodeContent.slice(
+          node.declarations[0].id.typeAnnotation.range[0] - node.range[0],
+          node.declarations[0].id.typeAnnotation.range[1] - node.range[0]
+        ).trim()
       }
     }
 
-    accessorLengths.push(accessor.length)
-    if(accessor.length > maxAccessorLength)
-      maxAccessorLength = accessor.length
+    // MEANT TO PROCCESS VARIABLES WITH MULTIPLE DECLARATIONS
+    if(node.type === 'VariableDeclarator'){
+      const parent = context.sourceCode.getText(node.parent)
+      keyword = parent.slice(0, node.parent.declarations[0].range[0] - node.parent.range[0]).trim()
+      id = (node.id as TSESTree.Identifier).name
+      if(node.id.typeAnnotation){
+        type = nodeContent.slice(
+          node.id.typeAnnotation.range[0] - node.range[0],
+          node.id.typeAnnotation.range[1] - node.range[0]
+        ).trim()
+      }
+    }
+
+    console.log(type)
+
+    keywordLengths.push(keyword.length)
+    if(keyword.length > maxKeywordLength)
+      maxKeywordLength = keyword.length
     
-    keyLengths.push(key.length)
-    if(key.length > maxKeyLength)
-      maxKeyLength = key.length
+    idLengths.push(id.length)
+    if(id.length > maxIdLength)
+      maxIdLength = id.length
     
     typeLengths.push(type.length)
     if(type.length > maxTypeLength)
       maxTypeLength = type.length
   })
 
-  keyDesiredCol = maxAccessorLength === 0 ? startingColumn : startingColumn + maxAccessorLength + 1
-  typeDesiredCol = maxKeyLength === 0 ? keyDesiredCol : keyDesiredCol + maxKeyLength + 1
+  idDesiredCol = maxKeywordLength === 0 ? startingColumn : startingColumn + maxKeywordLength + 1
+  typeDesiredCol = maxIdLength === 0 ? idDesiredCol : idDesiredCol + maxIdLength + 1
   valueDesiredCol = maxTypeLength === 0 ? typeDesiredCol : typeDesiredCol + maxTypeLength + 1
 
   return { 
     startingColumn,
-    keyDesiredCol,
+    idDesiredCol,
     typeDesiredCol,
     valueDesiredCol,
-    accessorLengths,
-    keyLengths,
+    keywordLengths,
+    idLengths,
     typeLengths,
-    maxAccessorLength,
-    maxKeyLength,
+    maxKeywordLength,
+    maxIdLength,
     maxTypeLength,
   }
 }
 
 // Move node to the desired column
 function alignItem(context: Context, node: TSESTree.Node, options: AlignmentOptions): void {
-  const padding = ' '.repeat(options.padding) + options.delimiter
+  let padding = options.delimiter ? ' '.repeat(options.padding) + options.delimiter : ' '.repeat(options.padding)
   const desiredColumn = options.delimiter ? options.desiredColumn + options.delimiter.length : options.desiredColumn
   if(node.loc.start.column !== desiredColumn){
     context.report({
-      node: node,
-      messageId: options.messageId,
+      node      : node,
+      messageId : options.messageId,
       fix(fixer: RuleFixer){
         return fixer.replaceTextRange(options.targetRange, padding)
       }
@@ -202,37 +230,37 @@ const createRule = ESLintUtils.RuleCreator(
 );
 
 const typeAlignment = createRule<Options, MessageIds>({
-  name: 'type-alignment',
+  name : 'type-alignment',
   meta: {
-    type: 'layout',
-    docs: {
+    type : 'layout',
+    docs : {
       description: 'Type annotations should be aligned vertically'
     },
-    fixable: 'whitespace',
-    schema: [
+    fixable : 'whitespace',
+    schema : [
       {
-        type: 'object',
-        properties: {
-          alignTypeDefinitions: { type: 'boolean' },
-          alignFunctionParams: { type: 'boolean' },
-          alignClassProperties: { type: 'boolean' },
-          alignObjectProperties: { type: 'boolean' },
+        type : 'object',
+        properties : {
+          alignTypeDefinitions  : { type: 'boolean' },
+          alignFunctionParams   : { type: 'boolean' },
+          alignClassProperties  : { type: 'boolean' },
+          alignObjectProperties : { type: 'boolean' },
         },
-        additionalProperties: false,
+        additionalProperties : false,
       },
     ],
     messages: {
-      'misalignedKeys': 'Parameter keys must be aligned.',
-      'misalignedTypes': 'Type annotations must be aligned.',
-      'misalignedValues': 'Default value declarations must be aligned.'
+      'misalignedKeys'   : 'Parameter keys must be aligned.',
+      'misalignedTypes'  : 'Type annotations must be aligned.',
+      'misalignedValues' : 'Default value declarations must be aligned.'
     },
   },
   defaultOptions: [
       {
-        alignTypeDefinitions: true,
-        alignFunctionParams: true,
-        alignClassProperties: true,
-        alignObjectProperties: true
+        alignTypeDefinitions  : true,
+        alignFunctionParams   : true,
+        alignClassProperties  : true,
+        alignObjectProperties : true
       }
   ],
   create(context, [options]){
@@ -247,10 +275,10 @@ const typeAlignment = createRule<Options, MessageIds>({
 
         group.forEach((node, i) => {
           alignItem(context, node.typeAnnotation, {
-            messageId: 'misalignedTypes',
-            desiredColumn: groupInfo.typeDesiredCol,
-            targetRange: [node.key!.range[1], node.typeAnnotation.range[0]],
-            padding: groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
+            messageId     : 'misalignedTypes',
+            desiredColumn : groupInfo.typeDesiredCol,
+            targetRange   : [node.key!.range[1], node.typeAnnotation.range[0]],
+            padding       : groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
           })
         })
       }
@@ -263,31 +291,31 @@ const typeAlignment = createRule<Options, MessageIds>({
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
 
-          let keyPadding = 0
-          let keyRange: TSESTree.Range = [node.range[0] - node.loc.start.column + groupInfo.startingColumn, node.range[0]]
-          let keyDesiredCol = groupInfo.startingColumn
+          let idPadding = 0
+          let idRange: TSESTree.Range = [node.range[0] - node.loc.start.column + groupInfo.startingColumn, node.range[0]]
+          let idDesiredCol = groupInfo.startingColumn
 
-          let typePadding = groupInfo.maxAccessorLength -
-                            groupInfo.accessorLengths[i] +
-                            groupInfo.maxKeyLength -
-                            groupInfo.keyLengths[i] + 2
+          let typePadding = groupInfo.maxKeywordLength -
+                            groupInfo.keywordLengths[i] +
+                            groupInfo.maxIdLength -
+                            groupInfo.idLengths[i] + 2
 
           if(node.type === 'TSParameterProperty'){
-            keyRange = [node.range[0] + groupInfo.accessorLengths[i], node.parameter.range[0]]
-            keyDesiredCol = groupInfo.keyDesiredCol
-            keyPadding = groupInfo.maxAccessorLength - groupInfo.accessorLengths[i] + 1
+            idRange = [node.range[0] + groupInfo.keywordLengths[i], node.parameter.range[0]]
+            idDesiredCol = groupInfo.idDesiredCol
+            idPadding = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
             node = node.parameter
 
-            typePadding = groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
+            typePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
           }
 
           let valuePadding = typePadding
 
           alignItem(context, node, {
-            messageId: 'misalignedKeys',
-            desiredColumn: keyDesiredCol,
-            targetRange: keyRange,
-            padding: keyPadding
+            messageId     : 'misalignedKeys',
+            desiredColumn : idDesiredCol,
+            targetRange   : idRange,
+            padding       : idPadding
           })
 
           const typeNode = node.type === 'AssignmentPattern' && 'typeAnnotation' in node.left
@@ -299,21 +327,21 @@ const typeAlignment = createRule<Options, MessageIds>({
           if(typeNode){
             valuePadding = groupInfo.maxTypeLength - groupInfo.typeLengths[i] + 1
             alignItem(context, typeNode, {
-              messageId: 'misalignedTypes',
-              desiredColumn: groupInfo.typeDesiredCol,
-              targetRange: [node.range[0] + groupInfo.keyLengths[i], typeNode.range[0]],
-              padding: typePadding
+              messageId     : 'misalignedTypes',
+              desiredColumn : groupInfo.typeDesiredCol,
+              targetRange   : [node.range[0] + groupInfo.idLengths[i], typeNode.range[0]],
+              padding       : typePadding
             })
           }
 
           if(node.type === 'AssignmentPattern'){
             const valueLoc = node.left.typeAnnotation ? groupInfo.valueDesiredCol : groupInfo.typeDesiredCol
             alignItem(context, node.right, {
-              messageId: 'misalignedTypes',
-              desiredColumn: valueLoc,
-              targetRange: [node.left.range[1], node.right.range[0]],
-              padding: valuePadding,
-              delimiter: '= '
+              messageId     : 'misalignedTypes',
+              desiredColumn : valueLoc,
+              targetRange   : [node.left.range[1], node.right.range[0]],
+              padding       : valuePadding,
+              delimiter     : '= '
             })
           }
         })
@@ -329,46 +357,48 @@ const typeAlignment = createRule<Options, MessageIds>({
         if(group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node,i) => {
-          let keyPadding = groupInfo.maxAccessorLength - groupInfo.accessorLengths[i] + 1
-          let typePadding = groupInfo.maxKeyLength - groupInfo.keyLengths[i] + 1
-          let keyRange: TSESTree.Range = [node.range[0] + groupInfo.accessorLengths[i], node.key.range[0]]
-          let keyDesiredCol = groupInfo.keyDesiredCol
-          if(groupInfo.accessorLengths[i] === 0){
-            keyRange = [node.key.range[0] - node.loc.start.column + groupInfo.startingColumn, node.key.range[0]]
-            keyDesiredCol = groupInfo.startingColumn
-            typePadding += keyPadding
-            keyPadding = 0
+          let idPadding = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
+          let typePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
+          let idRange: TSESTree.Range = [node.range[0] + groupInfo.keywordLengths[i], node.key.range[0]]
+          let idDesiredCol = groupInfo.idDesiredCol
+          if(groupInfo.keywordLengths[i] === 0){
+            idRange = [node.key.range[0] - node.loc.start.column + groupInfo.startingColumn, node.key.range[0]]
+            idDesiredCol = groupInfo.startingColumn
+            typePadding += idPadding
+            idPadding = 0
           }
-          let valuePadding = typePadding
 
           alignItem(context, node.key, {
-            messageId: 'misalignedKeys',
-            desiredColumn: keyDesiredCol,
-            targetRange: keyRange,
-            padding: keyPadding
+            messageId     : 'misalignedKeys',
+            desiredColumn : idDesiredCol,
+            targetRange   : idRange,
+            padding       : idPadding
           })
- 
+
+          let valueLoc = groupInfo.typeDesiredCol
+          let valueIndex = node.key.range[1]
+          let valuePadding = typePadding
+
           if(node.typeAnnotation){
+            valueLoc = groupInfo.valueDesiredCol
+            valueIndex = node.typeAnnotation.range[1]
             valuePadding = groupInfo.maxTypeLength - groupInfo.typeLengths[i] + 1
+
             alignItem(context, node.typeAnnotation, {
-              messageId: 'misalignedTypes',
-              desiredColumn: groupInfo.typeDesiredCol,
-              targetRange: [node.key.range[1], node.typeAnnotation.range[0]],
-              padding: typePadding
+              messageId     : 'misalignedTypes',
+              desiredColumn : groupInfo.typeDesiredCol,
+              targetRange   : [node.key.range[1], node.typeAnnotation.range[0]],
+              padding       : typePadding
             })
           }
 
           if(node.value !== null) {
-            const valueLoc = node.typeAnnotation ? groupInfo.valueDesiredCol : groupInfo.typeDesiredCol
-            const startIndex = node.typeAnnotation ? node.typeAnnotation.range[1] : node.key.range[1]
-            const endIndex = node.value.range[0]
-
             alignItem(context, node.value, {
-              messageId: 'misalignedValues',
-              desiredColumn: valueLoc,
-              targetRange: [startIndex, endIndex],
-              padding: valuePadding,
-              delimiter: '= '
+              messageId     : 'misalignedValues',
+              desiredColumn : valueLoc,
+              targetRange   : [valueIndex, node.value.range[0]],
+              padding       : valuePadding,
+              delimiter     : '= '
             })
           }
         })
@@ -380,30 +410,64 @@ const typeAlignment = createRule<Options, MessageIds>({
       const propGroups = getConsecutive(properties, () => true) as TSESTree.Property[][]
 
       for(const group of propGroups){
-        let maxKeyLength = 0, keyLengths: number[] = []
-        for(const node of group){
-          let length = node.key.range[1] - node.key.range[0]
-          if(node.computed) length += 2
-          keyLengths.push(length)
-          if(length > maxKeyLength) maxKeyLength = length
-        }
-
+        const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
           alignItem(context, node.value, {
-            messageId: 'misalignedValues',
-            desiredColumn: node.loc.start.column + maxKeyLength + 1,
-            targetRange: [node.range[0] + keyLengths[i], node.value.range[0]],
-            padding: maxKeyLength - keyLengths[i] + 1,
-            delimiter: ': '
+            messageId     : 'misalignedValues',
+            desiredColumn : groupInfo.valueDesiredCol,
+            targetRange   : [node.range[0] + groupInfo.idLengths[i], node.value.range[0]],
+            padding       : groupInfo.maxIdLength - groupInfo.idLengths[i] + 1,
+            delimiter     : ': '
           })
         })
       }
     }
 
-    function alignVariables(node: TSESTree.VariableDeclaration) {
-      node.kind
+    function alignVariables(nodes: TSESTree.VariableDeclaration[]) {
+      const isValid = (decl: TSESTree.VariableDeclarator): boolean => decl.id.type === 'ArrayPattern' || decl.id.type === 'ObjectPattern' || (decl.init !== null && (decl.init.type === 'ArrayExpression' || decl.init.type === 'ObjectExpression'))
+      const single = nodes.filter(node => node.declarations.length === 1 && !node.declarations.some(isValid))
+      let groups = getConsecutive(single, () => true) as TSESTree.VariableDeclaration[][]
+      
+      for(const group of groups) {
+        const groupInfo = nodeGroupInfo(context, group)
+        group.forEach((node, i) => {
+          alignItem(context, node.declarations[0].id, {
+            messageId     : 'misalignedKeys',
+            desiredColumn : groupInfo.idDesiredCol,
+            targetRange   : [node.range[0] + groupInfo.keywordLengths[i], node.declarations[0].range[0]],
+            padding       : groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1,
+          })
+
+          let valueDesiredCol = groupInfo.typeDesiredCol
+          let valuePadding = groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
+
+          if(node.declarations[0].id.typeAnnotation){
+            valueDesiredCol = groupInfo.valueDesiredCol
+            valuePadding = groupInfo.maxTypeLength - groupInfo.typeLengths[i] + 1
+            alignItem(context, node.declarations[0].id.typeAnnotation, {
+              messageId     : 'misalignedTypes',
+              desiredColumn : groupInfo.typeDesiredCol,
+              targetRange   : [node.declarations[0].id.range[0] + groupInfo.idLengths[i], node.declarations[0].id.typeAnnotation.range[0]],
+              padding       : groupInfo.maxIdLength - groupInfo.idLengths[i] + 1,
+            })
+          }
+
+          if(node.declarations[0].init !== null){
+            alignItem(context, node.declarations[0].init, {
+              messageId     : 'misalignedTypes',
+              desiredColumn : groupInfo.valueDesiredCol,
+              targetRange   : [node.declarations[0].id.range[1], node.declarations[0].init.range[0]],
+              padding       : valuePadding,
+              delimiter     : '= '
+            })
+          }
+        })
+      }
     }
 
+    const vars: TSESTree.VariableDeclaration[] = []
+
+    // ALIGN ASSIGNMENT EXPRESSIONS
     return {
       TSInterfaceBody(node) {
         if (options.alignTypeDefinitions) {
@@ -462,6 +526,18 @@ const typeAlignment = createRule<Options, MessageIds>({
       ObjectExpression(node){
         if (options.alignObjectProperties) {
           alignObjectProperties(node.properties)
+        }
+      },
+
+      VariableDeclaration(node){
+        if (options.alignObjectProperties) {
+          vars.push(node)
+        }
+      },
+
+      "Program:exit"(_){
+        if (options.alignObjectProperties) {
+          alignVariables(vars)
         }
       }
     }
