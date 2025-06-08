@@ -313,7 +313,7 @@ const typeAlignment = createRule<Options, MessageIds>({
 
           let typePadding = groupInfo.maxKeywordLength === 0
             ? groupInfo.maxIdLength - groupInfo.idLengths[i] + 1
-            : groupInfo.maxKeywordLength - groupInfo.maxIdLength - groupInfo.idLengths[i] + 2
+            : groupInfo.maxKeywordLength + groupInfo.maxIdLength - groupInfo.idLengths[i] + 2
 
           if(node.type === 'TSParameterProperty'){
             idRange = [node.range[0] + groupInfo.keywordLengths[i], node.parameter.range[0]]
@@ -469,7 +469,7 @@ const typeAlignment = createRule<Options, MessageIds>({
           if(node.declarations[0].init !== null){
             alignItem(context, node.declarations[0].init, {
               messageId     : 'misalignedTypes',
-              desiredColumn : groupInfo.valueDesiredCol,
+              desiredColumn : valueDesiredCol,
               targetRange   : [node.declarations[0].id.range[1], node.declarations[0].init.range[0]],
               padding       : valuePadding,
               delimiter     : '= '
