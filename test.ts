@@ -1,5 +1,5 @@
-const kir     = 'hello',
-dashagh = 'try again'
+const kir     = 'hello'
+let   dashagh = 'try again'
 // type Kir = {
 //   kir       : string,
 //   kirkirkir : string[],

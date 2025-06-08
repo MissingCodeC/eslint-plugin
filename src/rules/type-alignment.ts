@@ -112,7 +112,9 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
   let idDesiredCol = 0, typeDesiredCol = 0, valueDesiredCol = 0
   let maxKeywordLength = 0, maxIdLength = 0, maxTypeLength = 0
 
-  nodes.forEach((node, i) => {
+  
+
+  for(let node of nodes){
     let nodeContent = context.sourceCode.getText(node)
     let keyword = '', id = '', type = ''
 
@@ -176,8 +178,6 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
       }
     }
 
-    console.log(type)
-
     keywordLengths.push(keyword.length)
     if(keyword.length > maxKeywordLength)
       maxKeywordLength = keyword.length
@@ -189,7 +189,7 @@ export function nodeGroupInfo(context: Context, nodes: TSESTree.Node[]): NodeGro
     typeLengths.push(type.length)
     if(type.length > maxTypeLength)
       maxTypeLength = type.length
-  })
+  }
 
   idDesiredCol = maxKeywordLength === 0 ? startingColumn : startingColumn + maxKeywordLength + 1
   typeDesiredCol = maxIdLength === 0 ? idDesiredCol : idDesiredCol + maxIdLength + 1
@@ -270,7 +270,7 @@ const typeAlignment = createRule<Options, MessageIds>({
       const propGroups = getConsecutive(properties) as TypedNode[][];
 
       for(const group of propGroups) {
-        if(group.length === 1) continue;
+        if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
 
         group.forEach((node, i) => {
@@ -287,7 +287,7 @@ const typeAlignment = createRule<Options, MessageIds>({
     function alignFunctionParams(nodes : TSESTree.Node[]) {
       const paramGroups = getConsecutive(nodes, () => true);
       for (const group of paramGroups) {
-        if(group.length === 1) continue;
+        if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
 
@@ -354,7 +354,7 @@ const typeAlignment = createRule<Options, MessageIds>({
       let propGroups = getConsecutive(properties, () => true) as TSESTree.PropertyDefinition[][];
 
       for(const group of propGroups){
-        if(group.length === 1) continue;
+        if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node,i) => {
           let idPadding = groupInfo.maxKeywordLength - groupInfo.keywordLengths[i] + 1
@@ -408,8 +408,8 @@ const typeAlignment = createRule<Options, MessageIds>({
     function alignObjectProperties(nodes: TSESTree.Node[]) {
       const properties = nodes.filter(node => node.type === 'Property' && node.method === false && node.value.type !== 'ArrowFunctionExpression' && node.shorthand === false)
       const propGroups = getConsecutive(properties, () => true) as TSESTree.Property[][]
-
       for(const group of propGroups){
+        if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
           alignItem(context, node.value, {
@@ -429,6 +429,7 @@ const typeAlignment = createRule<Options, MessageIds>({
       let groups = getConsecutive(single, () => true) as TSESTree.VariableDeclaration[][]
       
       for(const group of groups) {
+        if(!group.length || group.length === 1) continue;
         const groupInfo = nodeGroupInfo(context, group)
         group.forEach((node, i) => {
           alignItem(context, node.declarations[0].id, {
