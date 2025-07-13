@@ -1,13 +1,44 @@
 {
   "compilerOptions": {
+    // BASIC
     "target": "ESNext",
-    "baseUrl": ".",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
+    "moduleResolution": "bundler",
+    "baseUrl": "./",
+    "resolveJsonModule": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // OUTPUT
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "removeComments": true,
+    "noEmitOnError": true,
+
+    // TYPE-CHECKING & CODE-QUALITY
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // PERFORMANCE
+    "incremental": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["./fixtures/**/*.*", "./_fixtures/**/*.*"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }
