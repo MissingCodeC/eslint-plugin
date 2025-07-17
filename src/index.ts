@@ -1,14 +1,11 @@
-import type { ESLint } from 'eslint'
-import typeAlignment from './rules/type-alignment'
+import rules from './rules'
 
 const plugin = {
-  meta: {
+  meta : {
     name    : '@missingcodec/eslint-plugin',
     version : '1.0.0',
   },
-  rules: {
-    'type-alignment': typeAlignment,
-  }
-} satisfies ESLint.Plugin
+  rules,
+}
 
 export default plugin

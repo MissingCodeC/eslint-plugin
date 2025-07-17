@@ -1,0 +1,26 @@
+{
+  // Disable prettier and register eslint as defalt formatter
+  "eslint.format.enable": true,
+  "prettier.enable": false,
+  "editor.formatOnSave": false,
+  "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+
+  // Disable visual feedback for stylistic rules in the IDE
+  "eslint.rules.customizations": [
+    // { "rule": "format/prettier", "severity": "off", "fixable": true },
+    // { "rule": "noa/type-alignment", "severity": "off", "fixable": true },
+    // { "rule": "style/*", "severity": "off", "fixable": true },
+    // { "rule": "*-indent", "severity": "off", "fixable": true },
+    // { "rule": "*-spacing", "severity": "off", "fixable": true },
+    // { "rule": "*-spaces", "severity": "off", "fixable": true },
+    // { "rule": "*-order", "severity": "off", "fixable": true },
+    // { "rule": "*-dangle", "severity": "off", "fixable": true },
+    // { "rule": "*-newline", "severity": "off", "fixable": true },
+    // { "rule": "*quotes", "severity": "off", "fixable": true },
+    // { "rule": "*semi", "severity": "off", "fixable": true }
+  ]
+}
